@@ -24,6 +24,8 @@
     "webpack-merge": "^4.2.2"
   },
   "dependencies": {
-    "pixi.js": "^5.2.4"
+    "pixi-particles": "^4.2.1",
+    "pixi.js": "^5.2.4",
+    "vconsole": "^3.3.4"
   }
 }
