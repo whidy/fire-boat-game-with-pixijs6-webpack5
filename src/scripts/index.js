@@ -1,25 +1,34 @@
 import * as PIXI from 'pixi.js'
-// import VConsole from 'vconsole'
-// var vConsole = new VConsole()
+import loader from './loader'
+import { collision } from './collision'
+loader.load()
 
 const w = document.documentElement.clientWidth
 const h = document.documentElement.clientHeight
 const dpr = 1 // window.devicePixelRatio
 let ratio = w / 375 / dpr / 2
 
-let containerMain, containerControl
+let containerMain, containerBoat, containerControl, containerBox
 
-let gameStart = false;
-let boatList = []
-let _flagAddBoat = true
-let shell
+let playTimesTotal = 5
+let totalCoin = 0
+
+let _flagGameStart = false
+let _flagBoatAdd = true
+let _flagIsFiring = false
+
 let shellSheet
-let boatSheetList = {}
 let boat1Sheet
 let boat2Sheet
 let boat3Sheet
 let coinSheet
-let isFiring = false
+
+let boatList = []
+let shell
+
+let boatSheetList = {}
+
+let textCoinCount
 const app = new PIXI.Application({
   width: w,
   height: h,
@@ -27,75 +36,40 @@ const app = new PIXI.Application({
   backgroundColor: 0xffffff,
   antialias: true,
   resolution: dpr || 1,
-  // resolution: 1,
-});
+})
 
-app.loader.baseUrl = "assets"
-app.loader
-  .add('bg', 'bg.png')
-  .add('shipHead', 'ship_head.png')
-  .add('cannon', 'cannon.png')
-  .add('shell', 'shell.png')
-  .add('btnFt', 'button_foot.png')
-  .add('btn', 'button.png')
-  .add('box', 'box.png')
-  .add('boxBg', 'box_bg.png')
-  .add('contact', 'contact.png')
-  .add('invite', 'invite.png')
-  .add('boat1', 'boat01_250×250.png')
-  .add('boat2', 'boat02_250×250.png')
-  .add('boat3', 'boat03_250×250.png')
-  .add('coin', 'coin_72×72.png')
-// .add('boat1', 'boat01.png')
-// .add('boat2', 'boat02.png')
-// .add('boat3', 'boat03.png')
-
-app.loader.onProgress.add(showProgress)
-app.loader.onComplete.add(doneLoading)
-app.loader.onError.add(reportError)
-app.loader.load()
+loader.onProgress.add(showProgress)
+loader.onComplete.add(doneLoading)
 function showProgress(e) {
   // console.log(e.progress)
 }
 
-function reportError(e) {
-  console.log('error: ' + e.message)
-}
-
-function doneLoading(e) {
-  // const containerMain = new PIXI.Container();
-  // app.stage.addChild(containerMain);
-  document.body.appendChild(app.view);
-  initScene();
-  initSprite();
-  initAnimation();
-  createShellSheet()
-
-}
-
-class Boat extends PIXI.Sprite {
-  constructor(x = 0, y = 0, texture, name = 'none', speed = 5) {
-    super(texture)
-    this.anchor.set(.5)
-    this.x = x
-    this.y = y
-    this.name = name
-    this.speed = speed
-  }
+function doneLoading() {
+  document.body.appendChild(app.view)
+  createShellSheet() //
+  initScene() // containerMain, containerBoat
+  initPop() // containerPop
+  initFire() // containerControl, containerBox
 }
 
 function initScene() {
-  containerMain = new PIXI.Container();
-  const background = new PIXI.Sprite.from(app.loader.resources.bg.texture)
-  background.scale.set(ratio);
+  containerMain = new PIXI.Container()
+  const background = new PIXI.Sprite.from(loader.resources.bg.texture)
+  background.scale.set(ratio)
   background.y = -40
   createCoinSheet()
   background.interactive = true
-  background.on('tap', boom);
-  containerMain.addChild(background);
-  app.stage.addChild(containerMain);
-  containerControl = new PIXI.Container();
-  let shipHead = new PIXI.Sprite.from(app.loader.resources.shipHead.texture)
+  background.on('tap', boom)
+  containerMain.addChild(background)
+  containerMain.sortableChildren = true
+  app.stage.addChild(containerMain)
+
+  containerBoat = new PIXI.Container()
+  containerBoat.zIndex = 1
+  app.stage.addChild(containerBoat)
+
+  containerControl = new PIXI.Container()
+  let shipHead = new PIXI.Sprite.from(loader.resources.shipHead.texture)
   shipHead.x = 0
   shipHead.y = h
   shipHead.scale.set(ratio)
@@ -106,7 +80,7 @@ function initScene() {
   // console.log(containerControl.y)
   containerControl.addChild(shipHead)
 
-  let cannon = new PIXI.Sprite.from(app.loader.resources.cannon.texture)
+  let cannon = new PIXI.Sprite.from(loader.resources.cannon.texture)
   cannon.x = app.stage.width / 2
   cannon.y = h + 90
   cannon.zIndex = 3
@@ -115,78 +89,138 @@ function initScene() {
   cannon.scale.set(ratio)
   containerControl.addChild(cannon)
 
-  let btn = new PIXI.Sprite.from(app.loader.resources.btn.texture)
-  btn.x = app.stage.width / 2
-  btn.y = h + 120
-  btn.zIndex = 5
-  btn.anchor.set(0.5, 1)
-  btn.scale.set(ratio)
-  btn.interactive = true
-  btn.on('touchstart', fireBefore);
-  btn.on('touchendoutside', fireCanceled);
-  btn.on('tap', fire);
-  containerControl.addChild(btn)
+  let btnFire = new PIXI.Sprite.from(loader.resources.btnFire.texture)
+  btnFire.x = app.stage.width / 2
+  btnFire.y = h + 120
+  btnFire.zIndex = 5
+  btnFire.anchor.set(0.5, 1)
+  btnFire.scale.set(ratio)
+  btnFire.interactive = true
+  btnFire.on('touchstart', fireBefore)
+  btnFire.on('touchendoutside', fireCanceled)
+  btnFire.on('tap', fire)
+  containerControl.addChild(btnFire)
 
-  let btnFt = new PIXI.Sprite.from(app.loader.resources.btnFt.texture)
-  btnFt.x = app.stage.width / 2
-  btnFt.y = h + 120 + 10
-  btnFt.anchor.set(0.5, 1)
-  btnFt.zIndex = 4
-  btnFt.scale.set(ratio)
-  containerControl.addChild(btnFt)
+  let btnFireFoot = new PIXI.Sprite.from(loader.resources.btnFireFoot.texture)
+  btnFireFoot.x = app.stage.width / 2
+  btnFireFoot.y = h + 120 + 10
+  btnFireFoot.anchor.set(0.5, 1)
+  btnFireFoot.zIndex = 4
+  btnFireFoot.scale.set(ratio)
+  containerControl.addChild(btnFireFoot)
+
+  let playTimesLeftText = new PIXI.Text(
+    `剩余炮弹数：${playTimesTotal}`,
+    new PIXI.TextStyle({
+      fontSize: 14,
+      fill: '#ffffff', // gradient
+      align: 'center',
+    })
+  )
+  playTimesLeftText.name = 'times-left'
+  playTimesLeftText.zIndex = 6
+  playTimesLeftText.x = app.stage.width / 2 - playTimesLeftText.width / 2
+  playTimesLeftText.y = h + 98
+  containerControl.addChild(playTimesLeftText)
+
   createShellSheet()
   // createShell()
 
+  containerBox = new PIXI.Container()
+  containerBox.sortableChildren = true
   let paddingX = 20
-  let box = new PIXI.Sprite.from(app.loader.resources.box.texture)
+  let box = new PIXI.Sprite.from(loader.resources.box.texture)
   box.x = paddingX
   box.y = h + 60
-  box.zIndex = 1
+  box.zIndex = 2
   box.scale.set(ratio)
+  box.interactive = true
+  box.on('tap', function () {
+    // todo 跳转到开户页面
+  })
+  containerBox.addChild(box)
 
   let boxRound = new PIXI.Graphics()
-  boxRound.zIndex = 0
+  boxRound.name = 'box-round'
+  boxRound.zIndex = 1
   let roundRadius = 25
-  boxRound.lineStyle(0);
-  boxRound.beginFill(0xffffff, 0.4);
-  boxRound.drawCircle(paddingX + roundRadius, h + 60 + roundRadius, 25);
-  boxRound.endFill();
-  containerControl.addChild(box)
-  containerControl.addChild(boxRound)
+  boxRound.lineStyle(0)
+  boxRound.beginFill(0xffffff, 0.4)
+  boxRound.drawCircle(paddingX + roundRadius, h + 60 + roundRadius, 25)
+  boxRound.endFill()
+  containerBox.addChild(boxRound)
 
-  let invite = new PIXI.Sprite.from(app.loader.resources.invite.texture)
-  invite.x = w - paddingX
-  invite.y = h + 30
-  invite.anchor.set(1, 0.5)
-  invite.scale.set(ratio)
-  containerControl.addChild(invite)
+  const textCoinCountStyle = new PIXI.TextStyle({
+    fontSize: 14,
+    fill: '#ffffff',
+    stroke: '#ff0000',
+    strokeThickness: 2,
+    align: 'center',
+  })
+  textCoinCount = new PIXI.Text(totalCoin, textCoinCountStyle)
+  textCoinCount.name = 'coins-count'
+  textCoinCount.zIndex = 3
+  textCoinCount.x = paddingX + boxRound.width / 2 - textCoinCount.width / 2
+  textCoinCount.y = h + 102
+  containerBox.addChild(textCoinCount)
 
-  let contact = new PIXI.Sprite.from(app.loader.resources.contact.texture)
-  contact.x = w - paddingX
-  contact.y = h + 100
-  contact.anchor.set(1, 0.5)
-  contact.scale.set(ratio)
-  containerControl.addChild(contact)
+  let textCoinQuota = new PIXI.Text('额度', textCoinCountStyle)
+  textCoinQuota.zIndex = 3
+  textCoinQuota.x = paddingX + boxRound.width / 2 - textCoinQuota.width / 2
+  textCoinQuota.y = h + 100 + textCoinCount.height
+  containerBox.addChild(textCoinQuota)
 
+  let btnInvite = new PIXI.Sprite.from(loader.resources.invite.texture)
+  btnInvite.x = w - paddingX
+  btnInvite.y = h + 30
+  btnInvite.anchor.set(1, 0.5)
+  btnInvite.scale.set(ratio)
+  btnInvite.interactive = true
+  btnInvite.on('tap', function () {
+    // todo 触发分享
+  })
+  containerBox.addChild(btnInvite)
+
+  let btnContact = new PIXI.Sprite.from(loader.resources.contact.texture)
+  btnContact.x = w - paddingX
+  btnContact.y = h + 100
+  btnContact.anchor.set(1, 0.5)
+  btnContact.scale.set(ratio)
+  btnContact.interactive = true
+  btnContact.on('tap', function () {
+    // todo 触发联系客服弹层
+  })
+  containerBox.addChild(btnContact)
+
+  containerControl.addChild(containerBox)
   app.stage.addChild(containerControl)
   // gameStart = true
   createBoatSheet()
   addBoat()
-  app.ticker.add(TickerAddBoat);
-  app.ticker.add(playing);
+  app.ticker.add(TickerAddBoat)
+  app.ticker.add(playing)
+}
+
+function initPop() {
+  let containerPops = new PIXI.Container()
 }
 
 function TickerAddBoat() {
   let lastestBoat = boatList.length && boatList[boatList.length - 1]
-  if ((boatList.length < 4 && w - lastestBoat.x > lastestBoat.width * 10 * Math.random()) || boatList.length === 0) {
+  if (
+    (boatList.length < 4 &&
+      w - lastestBoat.x > lastestBoat.width * 10 * Math.random()) ||
+    boatList.length === 0
+  ) {
     addBoat()
   }
   for (let i = 0; i < boatList.length; i++) {
-    const boat = boatList[i];
+    const boat = boatList[i]
     boat.play()
     boat.x -= 1
     if (boat.x < -boat.width) {
-      app.stage.removeChild(boat)
+      // app.stage.removeChild(boat)
+      containerBoat.removeChild(boat)
       boatList.shift()
     }
   }
@@ -194,16 +228,11 @@ function TickerAddBoat() {
 
 function initSprite() {
   // 创建船只
-
-}
-
-function initAnimation() {
-
 }
 
 let boatNo = 1
 function addBoat() {
-  _flagAddBoat = false
+  _flagBoatAdd = false
   const boatYStart = 340
   const boatYHeight = h - 340 - 220
   // 'boat' + Math.ceil(Math.random() * 3) + 'sheet'
@@ -212,7 +241,7 @@ function addBoat() {
   boat.animationSpeed = 0.2 * Math.random()
   boat.loop = true
 
-  // let boat = PIXI.Sprite.from(app.loader.resources['boat' + Math.ceil(Math.random() * 3)].texture)
+  // let boat = PIXI.Sprite.from(loader.resources['boat' + Math.ceil(Math.random() * 3)].texture)
   boat.name = `boat-${boatNo}`
   boat.scale.set(ratio)
   boat.anchor.set(0.5)
@@ -220,28 +249,29 @@ function addBoat() {
   boat.y = boatYStart + Math.random() * boatYHeight
   boat.zIndex = 1
   boatList.push(boat)
-  app.stage.addChild(boat)
+  // app.stage.addChild(boat)
+  containerBoat.addChild(boat)
   boatNo++
 }
 
 function fireBefore(e) {
   let btn = e.currentTarget
-  btn.scale.x /= 1.1;
-  btn.scale.y /= 1.1;
+  btn.scale.x /= 1.1
+  btn.scale.y /= 1.1
 }
 
 function fireCanceled(e) {
   let btn = e.currentTarget
-  btn.scale.x *= 1.1;
-  btn.scale.y *= 1.1;
+  btn.scale.x *= 1.1
+  btn.scale.y *= 1.1
 }
 let _ratio
 function fire(e) {
   let btn = e.currentTarget
-  btn.scale.x *= 1.1;
-  btn.scale.y *= 1.1;
-  if (!isFiring) {
-    isFiring = true
+  btn.scale.x *= 1.1
+  btn.scale.y *= 1.1
+  if (!_flagIsFiring) {
+    _flagIsFiring = true
     createShell()
     // todo 执行发射
     _ratio = ratio
@@ -252,9 +282,9 @@ function fire(e) {
 }
 
 function createBoatSheet() {
-  let b1sheet = new PIXI.BaseTexture.from(app.loader.resources['boat1'].url)
-  let b2sheet = new PIXI.BaseTexture.from(app.loader.resources['boat2'].url)
-  let b3sheet = new PIXI.BaseTexture.from(app.loader.resources['boat3'].url)
+  let b1sheet = new PIXI.BaseTexture.from(loader.resources['boat1'].url)
+  let b2sheet = new PIXI.BaseTexture.from(loader.resources['boat2'].url)
+  let b3sheet = new PIXI.BaseTexture.from(loader.resources['boat3'].url)
   let w = 250
   let h = 250
   boat1Sheet = [
@@ -275,7 +305,7 @@ function createBoatSheet() {
 }
 
 function createShellSheet() {
-  let ssheet = new PIXI.BaseTexture.from(app.loader.resources['shell'].url)
+  let ssheet = new PIXI.BaseTexture.from(loader.resources['shell'].url)
   let w = 140
   let h = 140
   shellSheet = [
@@ -286,12 +316,12 @@ function createShellSheet() {
     new PIXI.Texture(ssheet, new PIXI.Rectangle(4 * w, 0, w, h)),
     new PIXI.Texture(ssheet, new PIXI.Rectangle(5 * w, 0, w, h)),
     new PIXI.Texture(ssheet, new PIXI.Rectangle(6 * w, 0, w, h)),
-    new PIXI.Texture(ssheet, new PIXI.Rectangle(7 * w, 0, w, h))
+    new PIXI.Texture(ssheet, new PIXI.Rectangle(7 * w, 0, w, h)),
   ]
 }
 
 function createCoinSheet() {
-  let csheet = new PIXI.BaseTexture.from(app.loader.resources['coin'].url)
+  let csheet = new PIXI.BaseTexture.from(loader.resources['coin'].url)
   let w = 72
   let h = 72
   coinSheet = [
@@ -307,7 +337,7 @@ function createShell() {
   shell.anchor.set(0.5)
   shell.scale.set(ratio)
   shell.animationSpeed = 1
-  shell.zIndex = 2
+  shell.zIndex = 20
   shell.loop = true
   shell.x = app.view.width / 2
   shell.y = h
@@ -325,7 +355,8 @@ function bulletFlying() {
   shell.scale.set(_ratio)
   // todo shipHead
   if (shell.y < 300 + 145.5) {
-    isFiring = false
+    // 未击中，清理精灵
+    _flagIsFiring = false
     containerControl.removeChild(shell)
     app.ticker.remove(bulletFlying)
     // bullet.visible = false;
@@ -334,10 +365,10 @@ function bulletFlying() {
 
 function playing() {
   for (let i = 0; i < boatList.length; i++) {
-    const boat = boatList[i];
-    if (isFiring) {
+    const boat = boatList[i]
+    if (_flagIsFiring) {
       // console.log('碰撞检测')
-      if (testForAABB(shell, boat)) {
+      if (collision(shell, boat)) {
         // console.log('boom')
         let name = boat.name
         let idx
@@ -347,22 +378,23 @@ function playing() {
             break
           }
         }
-        const boundsShell = shell.getBounds()
+        // const boundsShell = shell.getBounds()
         const boundsBoat = boat.getBounds()
-        console.log(boundsShell)
-        console.log(boundsBoat)
-        isFiring = false
+        // console.log(boundsShell)
+        // console.log(boundsBoat)
         boatList.splice(idx, 1)
+
+        // _flagIsFiring = false
         containerControl.removeChild(shell)
-        app.stage.removeChild(boat)
+        containerBoat.removeChild(boat)
+        app.ticker.remove(bulletFlying)
         boom(boundsBoat)
       }
     }
-
   }
 }
 const coinList = []
-let _flagCoinDrop = false
+// let _flagCoinDrop = false
 function boom(bounds) {
   // console.log(e.data.global)
   // if (_flagCoinDrop) return
@@ -383,64 +415,32 @@ function coinDrop() {
   // _flagCoinDrop = true
   for (let i = 0; i < coinList.length; i++) {
     let coin = coinList[i]
-    app.stage.addChild(coin);
-    coin.x += 20 * (Math.random() - Math.random())
+    app.stage.addChild(coin)
+    coin.x += 50 * (Math.random() - Math.random())
     coin.y += 20 * Math.random()
     coin.play()
-    if (coin.y > h + 300) {
+    if (coin.y > h + 200) {
       app.stage.removeChild(coin)
       coinList.shift()
     }
   }
   if (coinList.length === 0) {
     // _flagCoinDrop = false
+    // 宝箱加钱
+    totalCoin += 1000
+    if (totalCoin === 1000) {
+      // todo 触发首次击中提示弹窗
+    }
+    refreshBoxContainer()
     app.ticker.remove(coinDrop)
+    _flagIsFiring = false
   }
 }
 
-
-function testForAABB(r1, r2) {
-  // const bounds1 = object1.getBounds();
-  // const bounds2 = object2.getBounds();
-  // return bounds1.x < bounds2.x + bounds2.width
-  //   && bounds1.x + bounds2.width > bounds2.x
-  //   && bounds1.y < bounds2.y + bounds2.height
-  //   && bounds1.y + bounds2.height > bounds2.y;
-  //Define the variables we'll need to calculate
-  let hit, combinedHalfWidths, combinedHalfHeights, vx, vy;
-  //hit will determine whether there's a collision
-  hit = false;
-  //Find the center points of each sprite
-  r1.centerX = r1.x + r1.width / 2;
-  r1.centerY = r1.y + r1.height / 2;
-  r2.centerX = r2.x + r2.width / 2;
-  r2.centerY = r2.y + r2.height / 2;
-  //Find the half-widths and half-heights of each sprite
-  r1.halfWidth = r1.width / 2;
-  r1.halfHeight = r1.height / 2;
-  r2.halfWidth = r2.width / 2;
-  r2.halfHeight = r2.height / 2;
-  //Calculate the distance vector between the sprites
-  vx = r1.centerX - r2.centerX;
-  vy = r1.centerY - r2.centerY;
-  //Figure out the combined half-widths and half-heights
-  combinedHalfWidths = r1.halfWidth + r2.halfWidth;
-  combinedHalfHeights = r1.halfHeight + r2.halfHeight;
-  //Check for a collision on the x axis
-  if (Math.abs(vx) < combinedHalfWidths) {
-    //A collision might be occurring. Check for a collision on the y axis
-    if (Math.abs(vy) < combinedHalfHeights) {
-      //There's definitely a collision happening
-      hit = true;
-    } else {
-      //There's no collision on the y axis
-      hit = false;
-    }
-  } else {
-    //There's no collision on the x axis
-    hit = false;
-  }
-  //`hit` will be either `true` or `false`
-  return hit;
-
+function refreshBoxContainer() {
+  const _coinsCount = containerBox.getChildByName('coins-count')
+  let _lastCoinsCountWidth = _coinsCount.width
+  _coinsCount.text = totalCoin
+  let curX = _coinsCount.x
+  _coinsCount.x = curX - (_coinsCount.width - _lastCoinsCountWidth) / 2
 }
