@@ -49,7 +49,7 @@ function doneLoading() {
   createShellSheet() //
   initScene() // containerMain, containerBoat
   initPop() // containerPop
-  initFire() // containerControl, containerBox
+  // initFire() // containerControl, containerBox
 }
 
 function initScene() {

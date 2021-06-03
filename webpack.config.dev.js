@@ -1,5 +1,4 @@
-const path = require('path')
-const merge = require('webpack-merge')
+const { merge } = require('webpack-merge')
 const common = require('./webpack.config.common.js')
 
 //和common配置文件合并
