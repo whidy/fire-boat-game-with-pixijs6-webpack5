@@ -1,6 +1,6 @@
-# PIXI.js 5 with Webpack 4
+# H5的炮击小船游戏
 
-使用最新的webpack4搭建。
+基于pixi6和webpack5搭建。
 
 安装依赖
 
@@ -11,7 +11,7 @@ npm i
 本地开发运行
 
 ```
-npm run dev
+npm run start
 ```
 
 打包编译
